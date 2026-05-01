@@ -25,6 +25,9 @@ htmlcov/
 # Chrome profile created by the bot
 .devseek_chrome_profile/
 
+# Edge profile created by the bot
+.devseek_edge_profile/
+
 # IDE / editors
 .vscode/
 .idea/
