@@ -113,7 +113,6 @@ class MainWindow(QMainWindow):
         self._chat.set_activity_log(self._activity)
         self._chat.run_command_requested.connect(self._run_in_terminal)
 
-        self._right_tabs.setMaximumWidth(620)
         self._splitter.addWidget(self._right_tabs)
 
         self._splitter.setSizes([220, 820, 360])
@@ -232,7 +231,7 @@ class MainWindow(QMainWindow):
 
         cfg_m.addSeparator()
 
-        self._act_show_browser = QAction("&Mostrar Chrome durante automação", self)
+        self._act_show_browser = QAction("&Mostrar navegador durante automação", self)
         self._act_show_browser.setCheckable(True)
         _show_browser_saved = self._settings.value("show_browser", False, type=bool)
         self._act_show_browser.setChecked(_show_browser_saved)
@@ -376,8 +375,8 @@ class MainWindow(QMainWindow):
         from core.deepseek_bot import set_keep_browser_visible
         set_keep_browser_visible(checked)
         self._status(
-            "Chrome visível durante automação ✓" if checked
-            else "Chrome ocultado durante automação"
+            "Navegador visivel durante automacao" if checked
+            else "Navegador ocultado durante automacao"
         )
 
     def _apply_shortcuts(self):

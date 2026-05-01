@@ -297,6 +297,40 @@ class ChatPanel(QWidget):
         self._auto_status.setWordWrap(True)
         layout.addWidget(self._auto_status)
 
+        # Persistent error details pane so long exceptions stay visible and easy to copy.
+        error_hdr_row = QHBoxLayout()
+        error_hdr_row.setContentsMargins(0, 0, 0, 0)
+        error_hdr_row.setSpacing(6)
+
+        self._error_lbl = QLabel("Detalhes do erro")
+        self._error_lbl.setStyleSheet("font-size: 9px; color: #F44747; font-weight: bold;")
+        error_hdr_row.addWidget(self._error_lbl)
+        error_hdr_row.addStretch()
+
+        self._btn_copy_error = QPushButton("Copiar erro")
+        self._btn_copy_error.setFixedHeight(22)
+        self._btn_copy_error.clicked.connect(self._copy_error_details)
+        error_hdr_row.addWidget(self._btn_copy_error)
+
+        self._btn_hide_error = QPushButton("Ocultar")
+        self._btn_hide_error.setFixedHeight(22)
+        self._btn_hide_error.clicked.connect(self._clear_error_details)
+        error_hdr_row.addWidget(self._btn_hide_error)
+
+        self._error_hdr = QWidget()
+        self._error_hdr.setLayout(error_hdr_row)
+        self._error_hdr.setVisible(False)
+        layout.addWidget(self._error_hdr)
+
+        self._error_view = QPlainTextEdit()
+        self._error_view.setReadOnly(True)
+        self._error_view.setLineWrapMode(QPlainTextEdit.WidgetWidth)
+        self._error_view.setMinimumHeight(90)
+        self._error_view.setMaximumHeight(220)
+        self._error_view.setFont(QFont("Consolas", 9))
+        self._error_view.setVisible(False)
+        layout.addWidget(self._error_view)
+
         layout.addWidget(self._sep())
 
         # Input
@@ -354,6 +388,7 @@ class ChatPanel(QWidget):
         self._history_mgr = None
         self._pending_files.clear()
         self._pending_commands.clear()
+        self._clear_error_details(clear_status=False)
         self._session_tokens = 0
         self._update_token_bar(0)
         self._session_label.setText("")
@@ -383,6 +418,7 @@ class ChatPanel(QWidget):
         if not self._history_mgr:
             return
         self.history_view.clear()
+        self._clear_error_details(clear_status=False)
         self._session_tokens = 0
         for msg in self._history_mgr.get_current_messages():
             self._render_bubble(msg["sender"], msg["text"], msg["color"])
@@ -403,6 +439,7 @@ class ChatPanel(QWidget):
             return
         self._history_mgr.new_session()
         self.history_view.clear()
+        self._clear_error_details(clear_status=False)
         self._session_tokens = 0
         self._update_token_bar(0)
         self._update_session_label()
@@ -516,7 +553,14 @@ class ChatPanel(QWidget):
 
     @pyqtSlot(bool, str)
     def _on_status_result(self, ok: bool, msg: str):
-        self._set_conn(*(_ST_OK if ok else (_ST_FAIL[0], msg)))
+        if ok:
+            self._set_conn(*_ST_OK)
+            return
+
+        self._set_conn(_ST_FAIL[0], self._summarize_status(msg))
+        self._show_error_details(msg, add_bubble=False)
+        if self._activity_log:
+            self._activity_log.log("error", msg)
 
     def _do_login(self):
         if self._login_worker and self._login_worker.isRunning():
@@ -526,9 +570,11 @@ class ChatPanel(QWidget):
         self._btn_login.setEnabled(False)
 
         self._login_worker = DeepSeekLoginWorker()
-        self._login_worker.status_update.connect(lambda m: self._set_conn(_ST_LOGIN[0], m))
+        self._login_worker.status_update.connect(
+            lambda m: self._set_conn(_ST_LOGIN[0], self._summarize_status(m))
+        )
         self._login_worker.login_success.connect(lambda: self._set_conn(*_ST_OK))
-        self._login_worker.login_failed.connect(lambda m: self._set_conn(_ST_ERROR[0], m))
+        self._login_worker.login_failed.connect(self._on_login_failed)
         self._login_worker.finished.connect(
             lambda: (self._btn_check.setEnabled(True), self._btn_login.setEnabled(True))
         )
@@ -541,6 +587,7 @@ class ChatPanel(QWidget):
         if not question:
             return
 
+        self._clear_error_details(clear_status=False)
         self._add_bubble("Você", question, "#007ACC")
         self.input_field.clear()
 
@@ -594,6 +641,7 @@ class ChatPanel(QWidget):
 
     @pyqtSlot(str)
     def _on_response(self, text: str):
+        self._clear_error_details(clear_status=False)
         self._add_bubble("DeepSeek", text, "#3DD68C")
         self._session_tokens += len(text) // 4
         self._update_token_bar(self._session_tokens)
@@ -605,20 +653,21 @@ class ChatPanel(QWidget):
         n_chat   = text.count('[DEVSEEK_CHAT]')
         n_create = text.count('[DEVSEEK_CREATE:')
         n_update = text.count('[DEVSEEK_UPDATE:')
+        n_run    = text.count('[DEVSEEK_RUN:')
         chars    = len(text)
 
         parts = [f"{chars} chars"]
-        if n_chat or n_create or n_update:
-            parts.append(f"CHAT:{n_chat} CREATE:{n_create} UPDATE:{n_update}")
+        if n_chat or n_create or n_update or n_run:
+            parts.append(f"CHAT:{n_chat} CREATE:{n_create} UPDATE:{n_update} RUN:{n_run}")
         else:
             parts.append("⚠️ sem blocos DEVSEEK")
 
         if commands:
-            parts.append(f"✅ {len(commands)} arquivo(s) prontos para aplicar")
-        elif n_create or n_update:
+            parts.append(f"✅ {len(commands)} ação(ões) pronta(s) para aplicar")
+        elif n_create or n_update or n_run:
             parts.append("⚠️ blocos encontrados mas nenhum comando válido parseado")
         else:
-            parts.append("nenhum arquivo gerado")
+            parts.append("nenhuma ação gerada")
 
         diagnostic = " · ".join(parts)
         self._auto_status.setText(diagnostic)
@@ -630,8 +679,9 @@ class ChatPanel(QWidget):
     def _on_error(self, msg: str):
         self._add_bubble("Sistema", msg, "#F44747")
         self._set_conn(*_ST_ERROR)
+        self._show_error_details(msg, add_bubble=False)
         if self._activity_log:
-            self._activity_log.log("error", msg[:80])
+            self._activity_log.log("error", msg)
 
     @pyqtSlot()
     def _on_worker_done(self):
@@ -642,6 +692,46 @@ class ChatPanel(QWidget):
 
     # ── Chat display ──────────────────────────────────────────────────────────
 
+    @pyqtSlot(str)
+    def _on_login_failed(self, msg: str):
+        self._set_conn(_ST_ERROR[0], self._summarize_status(msg))
+        self._show_error_details(msg, add_bubble=True)
+        if self._activity_log:
+            self._activity_log.log("error", msg)
+
+    def _summarize_status(self, msg: str) -> str:
+        first_line = (msg or "").strip().splitlines()[0] if msg else ""
+        return first_line or "Erro de conexao"
+
+    def _show_error_details(self, msg: str, add_bubble: bool):
+        text = (msg or "").strip()
+        if not text:
+            return
+        if add_bubble:
+            self._add_bubble("Sistema", text, "#F44747")
+        self._auto_status.setText("Erro na automacao. Os detalhes completos estao abaixo.")
+        self._error_view.setPlainText(text)
+        self._error_hdr.setVisible(True)
+        self._error_view.setVisible(True)
+        self._error_view.verticalScrollBar().setValue(
+            self._error_view.verticalScrollBar().minimum()
+        )
+
+    def _clear_error_details(self, clear_status: bool = False):
+        self._error_view.clear()
+        self._error_hdr.setVisible(False)
+        self._error_view.setVisible(False)
+        if clear_status:
+            self._auto_status.clear()
+
+    def _copy_error_details(self):
+        text = self._error_view.toPlainText().strip()
+        if not text:
+            return
+        from PyQt5.QtWidgets import QApplication
+        QApplication.clipboard().setText(text)
+        self._auto_status.setText("Erro copiado para a area de transferencia.")
+
     def _add_bubble(self, sender: str, text: str, color: str):
         if self._history_mgr:
             self._history_mgr.add_message(sender, text, color)
@@ -649,6 +739,7 @@ class ChatPanel(QWidget):
 
     def _render_bubble(self, sender: str, text: str, color: str):
         is_ai = sender == "DeepSeek"
+        is_system = sender == "Sistema"
 
         if is_ai:
             # Prefer [DEVSEEK_CHAT] content when present (new protocol).
@@ -663,7 +754,16 @@ class ChatPanel(QWidget):
                     .replace(">", "&gt;")
                     .replace("\n", "<br/>")
             )
-            body_html = f'<span style="white-space:pre-wrap;">{escaped}</span>'
+            if is_system:
+                body_html = (
+                    f'<div style="white-space:pre-wrap;'
+                    f'background:{self._current_theme.get("tab_bg","#2D2D2D")};'
+                    f'color:{self._current_theme.get("chat_fg","#D4D4D4")};'
+                    f'padding:8px;border-radius:4px;'
+                    f'font-family:Consolas,monospace;">{escaped}</div>'
+                )
+            else:
+                body_html = f'<span style="white-space:pre-wrap;">{escaped}</span>'
 
         # File creation bar
         file_bar = ""
@@ -692,13 +792,21 @@ class ChatPanel(QWidget):
             if commands:
                 cmd_id = f"cmds_{id(text)}_{len(self._pending_commands)}"
                 self._pending_commands[cmd_id] = commands
+                n_runs = sum(1 for c in commands if c.action == "run")
+                n_files = len(commands) - n_runs
+                if n_runs and n_files:
+                    label = f"Aplicar {n_files} alteração(ões) e executar {n_runs} comando(s)"
+                elif n_runs:
+                    label = f"Executar {n_runs} comando(s) no terminal"
+                else:
+                    label = f"Aplicar {len(commands)} alteração(ões) no projeto"
                 cmd_bar = (
                     f'<div style="margin-top:6px;padding:6px 8px;'
                     f'background:{self._current_theme.get("tab_bg","#2D2D2D")};'
                     f'border-radius:4px;font-size:10pt;">'
                     f'⚡ <a href="devseek://apply/{cmd_id}" '
                     f'style="color:#CE9178;text-decoration:none;">'
-                    f'Aplicar {len(commands)} alteração(ões) no projeto</a>'
+                    f'{label}</a>'
                     f'</div>'
                 )
 
@@ -807,16 +915,21 @@ class ChatPanel(QWidget):
                     results.append(r)
                     _log(r)
 
-            n_ok  = sum(1 for r in results if r.success)
+            n_ok  = sum(1 for r in results if r.success or r.command.action == "run")
             n_tot = len(selected)
+            n_run = sum(1 for r in results if r.command.action == "run")
             if n_tot == 0:
                 label = "🚫 Nenhuma alteração selecionada"
             elif n_ok == n_tot:
-                label = f"✅ {n_ok} arquivo(s) aplicado(s)"
+                label = (
+                    f"✅ {n_ok} ação(ões) aplicada(s)"
+                    if not n_run else
+                    f"✅ {n_ok} ação(ões) executada(s), incluindo {n_run} comando(s)"
+                )
             elif n_ok > 0:
-                label = f"⚠️ {n_ok}/{n_tot} aplicado(s)"
+                label = f"⚠️ {n_ok}/{n_tot} ação(ões) aplicada(s)"
             else:
-                label = "❌ Nenhuma alteração aplicada"
+                label = "❌ Nenhuma ação aplicada"
             _finish(label)
             return
 
@@ -829,14 +942,19 @@ class ChatPanel(QWidget):
             results.append(r)
             _log(r)
 
-        n_ok  = sum(1 for r in results if r.success)
+        n_ok  = sum(1 for r in results if r.success or r.command.action == "run")
         n_tot = len(commands)
+        n_run = sum(1 for r in results if r.command.action == "run")
         if n_ok == n_tot:
-            label = f"✅ {n_ok} arquivo(s) aplicado(s)"
+            label = (
+                f"✅ {n_ok} ação(ões) aplicada(s)"
+                if not n_run else
+                f"✅ {n_ok} ação(ões) executada(s), incluindo {n_run} comando(s)"
+            )
         elif n_ok > 0:
-            label = f"⚠️ {n_ok}/{n_tot} aplicado(s)"
+            label = f"⚠️ {n_ok}/{n_tot} ação(ões) aplicada(s)"
         else:
-            label = "❌ Nenhuma alteração aplicada"
+            label = "❌ Nenhuma ação aplicada"
         _finish(label)
 
         dlg = DiffDialog(results, self._current_theme, self, preview=False)
@@ -846,6 +964,7 @@ class ChatPanel(QWidget):
         self.history_view.clear()
         self._pending_files.clear()
         self._pending_commands.clear()
+        self._clear_error_details(clear_status=True)
 
     # ── Theme ─────────────────────────────────────────────────────────────────
 

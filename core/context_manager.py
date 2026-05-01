@@ -65,6 +65,17 @@ conteúdo completo
 [DEVSEEK_MOVE: origem.ext -> destino.ext]
 [DEVSEEK_RUN: comando aqui]
 
+RUN no terminal:
+- Use [DEVSEEK_RUN: ...] quando o usuario pedir para executar scripts, instalar dependencias,
+  iniciar servidor, rodar testes, build, linter ou diagnostico.
+- Quando voce emitir [DEVSEEK_RUN: ...], o DevSeek pode despachar esse comando
+  para o terminal integrado do projeto.
+- Nao diga que "nao tem acesso ao terminal" se [DEVSEEK_RUN] resolver a tarefa.
+- Exemplos:
+  [DEVSEEK_RUN: pnpm install]
+  [DEVSEEK_RUN: pnpm dev]
+  [DEVSEEK_RUN: pytest]
+
 ━━━ Múltiplos arquivos ━━━
 Coloque [DEVSEEK_MAIS] entre cada bloco de arquivo quando houver mais de um:
 [DEVSEEK_CREATE: a.js]
@@ -88,7 +99,9 @@ Coloque [DEVSEEK_MAIS] entre cada bloco de arquivo quando houver mais de um:
 5. Termine SEMPRE com [DEVSEEK_FIM] na última linha (nada depois)
 6. Use caminhos relativos à raiz do projeto
 7. Use a linguagem correta no bloco de código: python, html, css, js, json, etc.
-8. Prefira REPLACE a UPDATE — não reescreva um arquivo inteiro para mudar 3 linhas\
+8. Prefira REPLACE a UPDATE — não reescreva um arquivo inteiro para mudar 3 linhas
+9. Se o usuario pedir para executar algo no projeto, prefira [DEVSEEK_RUN]
+10. Nao invente a limitacao "nao tenho acesso ao terminal" quando [DEVSEEK_RUN] resolver a tarefa
 """
 
 DEFAULT_INSTRUCTIONS = """# Instruções para o DeepSeek
@@ -106,6 +119,44 @@ padrões adotados e qualquer outra informação relevante para o assistente.
 
 ## Restrições
 - Liste aqui classes ou módulos que não devem ser alterados sem autorização
+
+## Fluxo npm do Projeto
+(Quando solicitado pelo usuário, ou se for um projeto hospedado na vercel, feito com v0 por exemplo, você pode sugerir o seguinte fluxo de comandos npm para preparar o ambiente, auditar vulnerabilidades, corrigir problemas, para rodar o servidor local.)
+- Para preparar o ambiente, use `npm install`.
+- Para auditar vulnerabilidades, use `npm audit`.
+- Para corrigir vulnerabilidades, use `npm audit fix`.
+- Se necessário, use `npm audit fix --force` com cautela e teste o projeto depois.
+- Para rodar o servidor local, use `npm run dev`.
+- A porta padrão esperada é `http://localhost:3000`.
+- Para outra porta, use `npm run dev -- -p 4000`.
+"""
+
+NPM_WORKFLOW_KNOWLEDGE = """## Fluxo npm do Projeto
+
+### 1. Instalar dependências
+- Necessário para preparar o ambiente e baixar todos os pacotes listados no package.json.
+- No terminal, dentro da pasta do projeto, execute `npm install`.
+- Aguarde a instalação dos pacotes e verifique se não houve erros.
+
+### 2. Auditar vulnerabilidades
+- Verifica se há falhas de segurança nas dependências instaladas.
+- No terminal, execute `npm audit`.
+- Analise os pacotes listados com problemas.
+- Identifique se são dependências críticas ou apenas de desenvolvimento.
+
+### 3. Corrigir vulnerabilidades
+- Tenta corrigir automaticamente os problemas encontrados.
+- No terminal, execute `npm audit fix`.
+- Se ainda restarem falhas, use `npm audit fix --force`.
+- Atenção: `--force` pode atualizar pacotes com breaking changes.
+- Teste o projeto após aplicar as correções.
+
+### 4. Rodar servidor local
+- Inicia o servidor de desenvolvimento para acessar o projeto no navegador.
+- No terminal, execute `npm run dev`.
+- Aguarde a mensagem indicando que o servidor está rodando.
+- Abra o navegador em `http://localhost:3000` (porta padrão).
+- Se quiser outra porta, use `npm run dev -- -p 4000`.
 """
 
 
@@ -205,6 +256,9 @@ class ContextManager:
             instructions = self.get_instructions()
             if instructions:
                 parts.append(f"## Instruções e Regras\n{instructions}")
+
+        if (self.project_path / "package.json").exists():
+            parts.append(NPM_WORKFLOW_KNOWLEDGE)
 
         if include_structure:
             structure = self.get_structure()

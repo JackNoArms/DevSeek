@@ -3,10 +3,46 @@ import re
 import time
 import threading
 import subprocess
+import traceback
+import shutil
+from pathlib import Path
 from PyQt5.QtCore import QThread, pyqtSignal
 
 DEEPSEEK_URL = "https://chat.deepseek.com"
-PROFILE_DIR = os.path.join(os.path.expanduser("~"), ".devseek_chrome_profile")
+
+# ── Configuração do Navegador ───────────────────────────────────────────────
+# BROWSER_CHOICE pode ser: "chrome" ou "edge"
+# Altere esta variável ou configure via interface do usuário
+BROWSER_CHOICE = os.environ.get("DEVSEEK_BROWSER", "chrome").lower()
+
+# Diretórios de perfil por navegador
+if BROWSER_CHOICE == "edge":
+    PROFILE_DIR = os.path.join(os.path.expanduser("~"), ".devseek_edge_profile")
+else:
+    PROFILE_DIR = os.path.join(os.path.expanduser("~"), ".devseek_chrome_profile")
+
+
+def set_browser_choice(browser: str) -> None:
+    """Altera o navegador usado pelo DevSeek em tempo de execução.
+    
+    Args:
+        browser: "chrome" ou "edge"
+    """
+    global BROWSER_CHOICE, PROFILE_DIR
+    browser = browser.lower()
+    if browser not in ("chrome", "edge"):
+        raise ValueError("Browser deve ser 'chrome' ou 'edge'")
+    
+    BROWSER_CHOICE = browser
+    if browser == "edge":
+        PROFILE_DIR = os.path.join(os.path.expanduser("~"), ".devseek_edge_profile")
+    else:
+        PROFILE_DIR = os.path.join(os.path.expanduser("~"), ".devseek_chrome_profile")
+
+
+def get_browser_choice() -> str:
+    """Retorna o navegador atualmente configurado."""
+    return BROWSER_CHOICE
 
 # Unique end-of-response marker. Appended as a system instruction to every prompt.
 # When DeepSeek writes this exact string, we know the response is complete.
@@ -270,6 +306,19 @@ def set_test_response(response: str | None) -> None:
     _test_mode_response = response
 
 
+def _format_exception_message(prefix: str, exc: Exception, include_traceback: bool = True) -> str:
+    """Build a user-visible error string without truncating the original exception."""
+    message = str(exc).strip() or exc.__class__.__name__
+    text = f"{prefix}: {message}" if prefix else message
+    if not include_traceback:
+        return text
+
+    tb = traceback.format_exc().strip()
+    if tb and tb != "NoneType: None":
+        return f"{text}\n\nTraceback:\n{tb}"
+    return text
+
+
 # ── Low-level driver helpers ──────────────────────────────────────────────────
 
 def _get_chrome_major_version() -> int | None:
@@ -292,13 +341,130 @@ def _get_chrome_major_version() -> int | None:
     return None
 
 
+def _get_edge_major_version() -> int | None:
+    """Detecta a versão principal do Microsoft Edge via registro."""
+    paths = [
+        r"HKEY_CURRENT_USER\Software\Microsoft\Edge\BLBeacon",
+        r"HKEY_LOCAL_MACHINE\Software\Microsoft\Edge\BLBeacon",
+        r"HKEY_LOCAL_MACHINE\Software\Wow6432Node\Microsoft\Edge\BLBeacon",
+    ]
+    for path in paths:
+        try:
+            out = subprocess.run(
+                ["reg", "query", path, "/v", "version"],
+                capture_output=True, text=True, timeout=5,
+            ).stdout
+            m = re.search(r"(\d+)\.\d+\.\d+\.\d+", out)
+            if m:
+                return int(m.group(1))
+        except Exception:
+            pass
+    return None
+
+
+def _first_existing_path(candidates: list[str | Path]) -> str | None:
+    """Return the first existing file path from candidates."""
+    for candidate in candidates:
+        if not candidate:
+            continue
+        try:
+            p = Path(candidate).expanduser()
+        except Exception:
+            continue
+        if p.is_file():
+            return str(p)
+    return None
+
+
+def _get_edge_binary_path() -> str | None:
+    """Locate msedge.exe in the most common Windows install paths."""
+    candidates = [
+        Path(os.environ.get("PROGRAMFILES(X86)", "")) / "Microsoft" / "Edge" / "Application" / "msedge.exe",
+        Path(os.environ.get("PROGRAMFILES", "")) / "Microsoft" / "Edge" / "Application" / "msedge.exe",
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft" / "Edge" / "Application" / "msedge.exe",
+    ]
+    return _first_existing_path(candidates)
+
+
+def _get_edge_driver_path() -> str | None:
+    """Locate msedgedriver.exe from env var, PATH, or common driver caches."""
+    env_driver = os.environ.get("DEVSEEK_MSEDGEDRIVER")
+    if env_driver:
+        found = _first_existing_path([env_driver])
+        if found:
+            return found
+
+    which_driver = shutil.which("msedgedriver")
+    if which_driver:
+        return which_driver
+
+    cache_candidates = [
+        Path.cwd() / "msedgedriver.exe",
+        Path.cwd() / "drivers" / "msedgedriver.exe",
+        Path.home() / ".cache" / "selenium",
+        Path.home() / ".wdm",
+        Path(os.environ.get("LOCALAPPDATA", "")) / "selenium",
+    ]
+
+    found_drivers: list[Path] = []
+    for candidate in cache_candidates:
+        if candidate.is_file() and candidate.name.lower() == "msedgedriver.exe":
+            found_drivers.append(candidate)
+            continue
+        if candidate.is_dir():
+            try:
+                found_drivers.extend(candidate.rglob("msedgedriver.exe"))
+            except Exception:
+                pass
+
+    if not found_drivers:
+        return None
+
+    found_drivers.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return str(found_drivers[0])
+
+
+def _build_edge_setup_error(reason: str, original_error: Exception | None = None) -> RuntimeError:
+    """Create a concise setup error for Edge without forcing the user to read a traceback."""
+    version = _get_edge_major_version()
+    driver_path = _get_edge_driver_path()
+    binary_path = _get_edge_binary_path()
+
+    lines = [
+        "Nao foi possivel iniciar o Microsoft Edge.",
+        reason,
+    ]
+    if version:
+        lines.append(f"Versao detectada do Edge: {version}")
+    if binary_path:
+        lines.append(f"Edge encontrado em: {binary_path}")
+    if driver_path:
+        lines.append(f"msedgedriver encontrado em: {driver_path}")
+    else:
+        lines.append("Nenhum msedgedriver local foi encontrado.")
+        lines.append("Se necessario, defina DEVSEEK_MSEDGEDRIVER apontando para o msedgedriver.exe.")
+    if original_error:
+        lines.append(f"Detalhe tecnico: {original_error}")
+    return RuntimeError("\n".join(lines))
+
+
 def _make_fresh_driver() -> object:
+    """Cria um driver Selenium baseado na configuração BROWSER_CHOICE."""
+    if BROWSER_CHOICE == "edge":
+        return _make_edge_driver()
+    else:
+        return _make_chrome_driver()
+
+
+def _make_chrome_driver() -> object:
+    """Cria driver do Google Chrome usando undetected-chromedriver."""
     try:
         import undetected_chromedriver as uc
     except ImportError:
         raise RuntimeError(
             "undetected-chromedriver não instalado.\n"
-            "Execute:  pip install setuptools undetected-chromedriver selenium"
+            "Execute:  pip install setuptools undetected-chromedriver selenium\n"
+            "Ou execute: install.bat e escolha a opção 1 ou 3"
         )
     os.makedirs(PROFILE_DIR, exist_ok=True)
     opts = uc.ChromeOptions()
@@ -307,6 +473,84 @@ def _make_fresh_driver() -> object:
     opts.add_argument("--no-default-browser-check")
     version = _get_chrome_major_version()
     return uc.Chrome(options=opts, version_main=version, use_subprocess=True)
+
+
+def _make_edge_driver() -> object:
+    edge_binary = _get_edge_binary_path()
+    if not edge_binary:
+        raise _build_edge_setup_error(
+            "O executavel msedge.exe nao foi encontrado nas pastas padrao do Windows."
+        )
+
+    driver_path = _get_edge_driver_path()
+
+    # Prefer Selenium 4 native Edge integration when available.
+    try:
+        from selenium import webdriver
+        from selenium.webdriver.edge.options import Options as NativeEdgeOptions
+        from selenium.webdriver.edge.service import Service as EdgeService
+
+        native_opts = NativeEdgeOptions()
+        native_has_modern_api = (
+            hasattr(native_opts, "add_argument")
+            and hasattr(native_opts, "binary_location")
+        )
+        if native_has_modern_api:
+            os.makedirs(PROFILE_DIR, exist_ok=True)
+            native_opts.add_argument(f"--user-data-dir={PROFILE_DIR}")
+            native_opts.add_argument("--no-first-run")
+            native_opts.add_argument("--no-default-browser-check")
+            native_opts.binary_location = edge_binary
+
+            service = EdgeService(executable_path=driver_path) if driver_path else EdgeService()
+            try:
+                return webdriver.Edge(service=service, options=native_opts)
+            except Exception as exc:
+                msg = str(exc).lower()
+                if (
+                    "msedgedriver" in msg
+                    or "unable to obtain driver" in msg
+                    or "cannot find msedge binary" in msg
+                    or "edge driver" in msg
+                ):
+                    raise _build_edge_setup_error(
+                        "O Selenium nao conseguiu localizar ou baixar um driver compativel para o Edge.",
+                        exc,
+                    ) from exc
+                raise
+    except ImportError:
+        pass
+
+    # Legacy fallback for Selenium 3.x environments.
+    try:
+        from msedge.selenium_tools import Edge as LegacyEdge, EdgeOptions as LegacyEdgeOptions
+    except ImportError as exc:
+        raise RuntimeError(
+            "Suporte do Edge indisponivel no ambiente atual.\n"
+            "Atualize para Selenium 4 com: pip install --upgrade selenium\n"
+            "Ou reinstale o suporte legado do Edge e configure o msedgedriver."
+        ) from exc
+
+    if not driver_path:
+        raise _build_edge_setup_error(
+            "O ambiente esta usando Selenium 3 legado e precisa de um msedgedriver.exe local."
+        )
+
+    os.makedirs(PROFILE_DIR, exist_ok=True)
+    legacy_opts = LegacyEdgeOptions()
+    legacy_opts.use_chromium = True
+    legacy_opts.binary_location = edge_binary
+    legacy_opts.add_argument(f"--user-data-dir={PROFILE_DIR}")
+    legacy_opts.add_argument("--no-first-run")
+    legacy_opts.add_argument("--no-default-browser-check")
+
+    try:
+        return LegacyEdge(executable_path=driver_path, options=legacy_opts)
+    except Exception as exc:
+        raise _build_edge_setup_error(
+            "O Edge legado falhou ao iniciar mesmo com um driver local configurado.",
+            exc,
+        ) from exc
 
 
 def _is_alive() -> bool:
@@ -571,7 +815,7 @@ class DeepSeekWorker(QThread):
         except RuntimeError as e:
             self.error_occurred.emit(str(e))
         except Exception as e:
-            self.error_occurred.emit(f"Erro: {str(e)[:200]}")
+            self.error_occurred.emit(_format_exception_message("Erro", e))
         finally:
             _hide_browser()
 
@@ -746,13 +990,14 @@ class DeepSeekWorker(QThread):
         n_chat   = len(re.findall(r'\[DEVSEEK_CHAT\]', text))
         n_create = len(re.findall(r'\[DEVSEEK_CREATE:', text))
         n_update = len(re.findall(r'\[DEVSEEK_UPDATE:', text))
+        n_run    = len(re.findall(r'\[DEVSEEK_RUN:', text))
         n_mais   = text.count('[DEVSEEK_MAIS]')
         n_cmds   = len(parse_commands(text))
         chars    = len(text)
-        blocks   = f"CHAT:{n_chat} CREATE:{n_create} UPDATE:{n_update}"
+        blocks   = f"CHAT:{n_chat} CREATE:{n_create} UPDATE:{n_update} RUN:{n_run}"
         if n_mais:
             blocks += f" MAIS:{n_mais}"
-        if n_cmds == 0 and n_chat == 0 and n_create == 0 and n_update == 0:
+        if n_cmds == 0 and n_chat == 0 and n_create == 0 and n_update == 0 and n_run == 0:
             protocol = "⚠️ sem blocos DEVSEEK"
         else:
             protocol = f"{n_cmds} cmd(s) prontos"
@@ -850,7 +1095,7 @@ class DeepSeekStatusWorker(QThread):
             ok = _chat_ready(driver)
             self.result.emit(ok, "Conectado" if ok else "Não autenticado")
         except Exception as e:
-            self.result.emit(False, f"Falha: {str(e)[:80]}")
+            self.result.emit(False, _format_exception_message("Falha", e))
 
 
 class DeepSeekLoginWorker(QThread):
@@ -890,4 +1135,4 @@ class DeepSeekLoginWorker(QThread):
         except RuntimeError as e:
             self.login_failed.emit(str(e))
         except Exception as e:
-            self.login_failed.emit(f"Erro: {str(e)[:150]}")
+            self.login_failed.emit(_format_exception_message("Erro", e))
