@@ -119,6 +119,44 @@ padrões adotados e qualquer outra informação relevante para o assistente.
 
 ## Restrições
 - Liste aqui classes ou módulos que não devem ser alterados sem autorização
+
+## Fluxo npm do Projeto
+(Quando solicitado pelo usuário, ou se for um projeto hospedado na vercel, feito com v0 por exemplo, você pode sugerir o seguinte fluxo de comandos npm para preparar o ambiente, auditar vulnerabilidades, corrigir problemas, para rodar o servidor local.)
+- Para preparar o ambiente, use `npm install`.
+- Para auditar vulnerabilidades, use `npm audit`.
+- Para corrigir vulnerabilidades, use `npm audit fix`.
+- Se necessário, use `npm audit fix --force` com cautela e teste o projeto depois.
+- Para rodar o servidor local, use `npm run dev`.
+- A porta padrão esperada é `http://localhost:3000`.
+- Para outra porta, use `npm run dev -- -p 4000`.
+"""
+
+NPM_WORKFLOW_KNOWLEDGE = """## Fluxo npm do Projeto
+
+### 1. Instalar dependências
+- Necessário para preparar o ambiente e baixar todos os pacotes listados no package.json.
+- No terminal, dentro da pasta do projeto, execute `npm install`.
+- Aguarde a instalação dos pacotes e verifique se não houve erros.
+
+### 2. Auditar vulnerabilidades
+- Verifica se há falhas de segurança nas dependências instaladas.
+- No terminal, execute `npm audit`.
+- Analise os pacotes listados com problemas.
+- Identifique se são dependências críticas ou apenas de desenvolvimento.
+
+### 3. Corrigir vulnerabilidades
+- Tenta corrigir automaticamente os problemas encontrados.
+- No terminal, execute `npm audit fix`.
+- Se ainda restarem falhas, use `npm audit fix --force`.
+- Atenção: `--force` pode atualizar pacotes com breaking changes.
+- Teste o projeto após aplicar as correções.
+
+### 4. Rodar servidor local
+- Inicia o servidor de desenvolvimento para acessar o projeto no navegador.
+- No terminal, execute `npm run dev`.
+- Aguarde a mensagem indicando que o servidor está rodando.
+- Abra o navegador em `http://localhost:3000` (porta padrão).
+- Se quiser outra porta, use `npm run dev -- -p 4000`.
 """
 
 
@@ -218,6 +256,9 @@ class ContextManager:
             instructions = self.get_instructions()
             if instructions:
                 parts.append(f"## Instruções e Regras\n{instructions}")
+
+        if (self.project_path / "package.json").exists():
+            parts.append(NPM_WORKFLOW_KNOWLEDGE)
 
         if include_structure:
             structure = self.get_structure()
