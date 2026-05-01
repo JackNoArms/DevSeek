@@ -1,0 +1,32 @@
+{
+  "name": "Custom",
+  "editor_bg": "#aa0000",
+  "editor_fg": "#D4D4D4",
+  "sidebar_bg": "#252526",
+  "sidebar_fg": "#CCCCCC",
+  "chat_bg": "#1E1E1E",
+  "chat_fg": "#D4D4D4",
+  "tab_bg": "#2D2D2D",
+  "tab_active_bg": "#1E1E1E",
+  "tab_fg": "#CCCCCC",
+  "selection_bg": "#264F78",
+  "syntax": {
+    "keyword": "#569CD6",
+    "string": "#CE9178",
+    "comment": "#6A9955",
+    "number": "#B5CEA8",
+    "function": "#DCDCAA",
+    "class": "#4EC9B0",
+    "decorator": "#C586C0",
+    "builtin": "#4FC1FF"
+  },
+  "editor_font_family": "Consolas",
+  "editor_font_size": 11,
+  "editor_font_bold": false,
+  "editor_font_italic": false,
+  "chat_font_family": "Segoe UI",
+  "chat_font_size": 10,
+  "editor_bg_image": "",
+  "editor_bg_opacity": 0.71,
+  "editor_bg_position": "stretch"
+}

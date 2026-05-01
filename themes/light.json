@@ -1,0 +1,23 @@
+{
+  "name": "Light",
+  "editor_bg": "#FFFFFF",
+  "editor_fg": "#000000",
+  "sidebar_bg": "#F3F3F3",
+  "sidebar_fg": "#333333",
+  "chat_bg": "#FAFAFA",
+  "chat_fg": "#000000",
+  "tab_bg": "#ECECEC",
+  "tab_active_bg": "#FFFFFF",
+  "tab_fg": "#333333",
+  "selection_bg": "#ADD6FF",
+  "syntax": {
+    "keyword": "#0000FF",
+    "string": "#A31515",
+    "comment": "#008000",
+    "number": "#098658",
+    "function": "#795E26",
+    "class": "#267F99",
+    "decorator": "#AF00DB",
+    "builtin": "#0070C1"
+  }
+}

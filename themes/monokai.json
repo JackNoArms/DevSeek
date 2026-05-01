@@ -1,0 +1,23 @@
+{
+  "name": "Monokai",
+  "editor_bg": "#272822",
+  "editor_fg": "#F8F8F2",
+  "sidebar_bg": "#1E1F1C",
+  "sidebar_fg": "#CFCFC2",
+  "chat_bg": "#272822",
+  "chat_fg": "#F8F8F2",
+  "tab_bg": "#3E3D32",
+  "tab_active_bg": "#272822",
+  "tab_fg": "#CFCFC2",
+  "selection_bg": "#49483E",
+  "syntax": {
+    "keyword": "#F92672",
+    "string": "#E6DB74",
+    "comment": "#75715E",
+    "number": "#AE81FF",
+    "function": "#A6E22E",
+    "class": "#66D9EF",
+    "decorator": "#F92672",
+    "builtin": "#66D9EF"
+  }
+}

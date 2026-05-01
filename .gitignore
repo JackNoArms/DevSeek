@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Tests
+.pytest_cache/
+.coverage
+htmlcov/
+
+# DevSeek runtime data (user-specific, not source code)
+.devseek/
+
+# Chrome profile created by the bot
+.devseek_chrome_profile/
+
+# IDE / editors
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Claude Code session files
+.claude/
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Logs
+*.log

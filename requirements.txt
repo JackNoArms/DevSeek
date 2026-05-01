@@ -1,0 +1,4 @@
+PyQt5>=5.15.0
+undetected-chromedriver>=3.5.0
+selenium>=4.15.0
+watchdog>=3.0.0
