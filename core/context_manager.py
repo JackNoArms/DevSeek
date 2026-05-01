@@ -65,6 +65,17 @@ conteúdo completo
 [DEVSEEK_MOVE: origem.ext -> destino.ext]
 [DEVSEEK_RUN: comando aqui]
 
+RUN no terminal:
+- Use [DEVSEEK_RUN: ...] quando o usuario pedir para executar scripts, instalar dependencias,
+  iniciar servidor, rodar testes, build, linter ou diagnostico.
+- Quando voce emitir [DEVSEEK_RUN: ...], o DevSeek pode despachar esse comando
+  para o terminal integrado do projeto.
+- Nao diga que "nao tem acesso ao terminal" se [DEVSEEK_RUN] resolver a tarefa.
+- Exemplos:
+  [DEVSEEK_RUN: pnpm install]
+  [DEVSEEK_RUN: pnpm dev]
+  [DEVSEEK_RUN: pytest]
+
 ━━━ Múltiplos arquivos ━━━
 Coloque [DEVSEEK_MAIS] entre cada bloco de arquivo quando houver mais de um:
 [DEVSEEK_CREATE: a.js]
@@ -88,7 +99,9 @@ Coloque [DEVSEEK_MAIS] entre cada bloco de arquivo quando houver mais de um:
 5. Termine SEMPRE com [DEVSEEK_FIM] na última linha (nada depois)
 6. Use caminhos relativos à raiz do projeto
 7. Use a linguagem correta no bloco de código: python, html, css, js, json, etc.
-8. Prefira REPLACE a UPDATE — não reescreva um arquivo inteiro para mudar 3 linhas\
+8. Prefira REPLACE a UPDATE — não reescreva um arquivo inteiro para mudar 3 linhas
+9. Se o usuario pedir para executar algo no projeto, prefira [DEVSEEK_RUN]
+10. Nao invente a limitacao "nao tenho acesso ao terminal" quando [DEVSEEK_RUN] resolver a tarefa
 """
 
 DEFAULT_INSTRUCTIONS = """# Instruções para o DeepSeek

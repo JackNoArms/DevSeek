@@ -653,20 +653,21 @@ class ChatPanel(QWidget):
         n_chat   = text.count('[DEVSEEK_CHAT]')
         n_create = text.count('[DEVSEEK_CREATE:')
         n_update = text.count('[DEVSEEK_UPDATE:')
+        n_run    = text.count('[DEVSEEK_RUN:')
         chars    = len(text)
 
         parts = [f"{chars} chars"]
-        if n_chat or n_create or n_update:
-            parts.append(f"CHAT:{n_chat} CREATE:{n_create} UPDATE:{n_update}")
+        if n_chat or n_create or n_update or n_run:
+            parts.append(f"CHAT:{n_chat} CREATE:{n_create} UPDATE:{n_update} RUN:{n_run}")
         else:
             parts.append("⚠️ sem blocos DEVSEEK")
 
         if commands:
-            parts.append(f"✅ {len(commands)} arquivo(s) prontos para aplicar")
-        elif n_create or n_update:
+            parts.append(f"✅ {len(commands)} ação(ões) pronta(s) para aplicar")
+        elif n_create or n_update or n_run:
             parts.append("⚠️ blocos encontrados mas nenhum comando válido parseado")
         else:
-            parts.append("nenhum arquivo gerado")
+            parts.append("nenhuma ação gerada")
 
         diagnostic = " · ".join(parts)
         self._auto_status.setText(diagnostic)
@@ -791,13 +792,21 @@ class ChatPanel(QWidget):
             if commands:
                 cmd_id = f"cmds_{id(text)}_{len(self._pending_commands)}"
                 self._pending_commands[cmd_id] = commands
+                n_runs = sum(1 for c in commands if c.action == "run")
+                n_files = len(commands) - n_runs
+                if n_runs and n_files:
+                    label = f"Aplicar {n_files} alteração(ões) e executar {n_runs} comando(s)"
+                elif n_runs:
+                    label = f"Executar {n_runs} comando(s) no terminal"
+                else:
+                    label = f"Aplicar {len(commands)} alteração(ões) no projeto"
                 cmd_bar = (
                     f'<div style="margin-top:6px;padding:6px 8px;'
                     f'background:{self._current_theme.get("tab_bg","#2D2D2D")};'
                     f'border-radius:4px;font-size:10pt;">'
                     f'⚡ <a href="devseek://apply/{cmd_id}" '
                     f'style="color:#CE9178;text-decoration:none;">'
-                    f'Aplicar {len(commands)} alteração(ões) no projeto</a>'
+                    f'{label}</a>'
                     f'</div>'
                 )
 
@@ -906,16 +915,21 @@ class ChatPanel(QWidget):
                     results.append(r)
                     _log(r)
 
-            n_ok  = sum(1 for r in results if r.success)
+            n_ok  = sum(1 for r in results if r.success or r.command.action == "run")
             n_tot = len(selected)
+            n_run = sum(1 for r in results if r.command.action == "run")
             if n_tot == 0:
                 label = "🚫 Nenhuma alteração selecionada"
             elif n_ok == n_tot:
-                label = f"✅ {n_ok} arquivo(s) aplicado(s)"
+                label = (
+                    f"✅ {n_ok} ação(ões) aplicada(s)"
+                    if not n_run else
+                    f"✅ {n_ok} ação(ões) executada(s), incluindo {n_run} comando(s)"
+                )
             elif n_ok > 0:
-                label = f"⚠️ {n_ok}/{n_tot} aplicado(s)"
+                label = f"⚠️ {n_ok}/{n_tot} ação(ões) aplicada(s)"
             else:
-                label = "❌ Nenhuma alteração aplicada"
+                label = "❌ Nenhuma ação aplicada"
             _finish(label)
             return
 
@@ -928,14 +942,19 @@ class ChatPanel(QWidget):
             results.append(r)
             _log(r)
 
-        n_ok  = sum(1 for r in results if r.success)
+        n_ok  = sum(1 for r in results if r.success or r.command.action == "run")
         n_tot = len(commands)
+        n_run = sum(1 for r in results if r.command.action == "run")
         if n_ok == n_tot:
-            label = f"✅ {n_ok} arquivo(s) aplicado(s)"
+            label = (
+                f"✅ {n_ok} ação(ões) aplicada(s)"
+                if not n_run else
+                f"✅ {n_ok} ação(ões) executada(s), incluindo {n_run} comando(s)"
+            )
         elif n_ok > 0:
-            label = f"⚠️ {n_ok}/{n_tot} aplicado(s)"
+            label = f"⚠️ {n_ok}/{n_tot} ação(ões) aplicada(s)"
         else:
-            label = "❌ Nenhuma alteração aplicada"
+            label = "❌ Nenhuma ação aplicada"
         _finish(label)
 
         dlg = DiffDialog(results, self._current_theme, self, preview=False)

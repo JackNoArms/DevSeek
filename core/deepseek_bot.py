@@ -990,13 +990,14 @@ class DeepSeekWorker(QThread):
         n_chat   = len(re.findall(r'\[DEVSEEK_CHAT\]', text))
         n_create = len(re.findall(r'\[DEVSEEK_CREATE:', text))
         n_update = len(re.findall(r'\[DEVSEEK_UPDATE:', text))
+        n_run    = len(re.findall(r'\[DEVSEEK_RUN:', text))
         n_mais   = text.count('[DEVSEEK_MAIS]')
         n_cmds   = len(parse_commands(text))
         chars    = len(text)
-        blocks   = f"CHAT:{n_chat} CREATE:{n_create} UPDATE:{n_update}"
+        blocks   = f"CHAT:{n_chat} CREATE:{n_create} UPDATE:{n_update} RUN:{n_run}"
         if n_mais:
             blocks += f" MAIS:{n_mais}"
-        if n_cmds == 0 and n_chat == 0 and n_create == 0 and n_update == 0:
+        if n_cmds == 0 and n_chat == 0 and n_create == 0 and n_update == 0 and n_run == 0:
             protocol = "⚠️ sem blocos DEVSEEK"
         else:
             protocol = f"{n_cmds} cmd(s) prontos"

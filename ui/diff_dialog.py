@@ -87,7 +87,8 @@ class DiffDialog(QDialog):
             else:                          # error
                 icon = "❌"
 
-            item = QListWidgetItem(f"{icon}  {r.command.action}  {r.command.path}")
+            target = r.command.path if r.command.path else "(sem alvo)"
+            item = QListWidgetItem(f"{icon}  {r.command.action}  {target}")
             item.setToolTip(r.message)
 
             if self._preview:
@@ -156,13 +157,16 @@ class DiffDialog(QDialog):
         if row < 0 or row >= len(self._results):
             return
         r = self._results[row]
+        target = r.command.path if r.command.path else "(sem alvo)"
         self._detail_label.setText(
-            f"{r.command.action}  →  {r.command.path}  |  {r.message}"
+            f"{r.command.action}  →  {target}  |  {r.message}"
         )
         if r.diff:
             self._diff_view.setPlainText(r.diff)
         elif r.command.content:
             self._diff_view.setPlainText(r.command.content)
+        elif r.command.action == "run":
+            self._diff_view.setPlainText(r.command.path)
         else:
             self._diff_view.setPlainText("(sem diff disponível)")
 
