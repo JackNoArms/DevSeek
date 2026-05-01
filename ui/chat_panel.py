@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (
     QFrame, QSizePolicy, QShortcut, QProgressBar, QRadioButton,
     QButtonGroup
 )
-from PyQt5.QtCore import Qt, pyqtSlot, QUrl
+from PyQt5.QtCore import Qt, pyqtSlot, pyqtSignal, QUrl
 from PyQt5.QtGui import QFont, QKeySequence
 
 from core.deepseek_bot import DeepSeekWorker, DeepSeekStatusWorker, DeepSeekLoginWorker, FINISH_MARKER
